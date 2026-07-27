@@ -38,6 +38,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import duckdb
+import polars as pl
 
 # Where the .sql files live (you start using these on Day 2).
 SQL_DIR = Path(__file__).resolve().parents[2] / "sql"
@@ -120,7 +121,24 @@ def tag_revenue(con: duckdb.DuckDBPyConnection) -> int:
         # with columns ["tag", "revenue"].
         con.execute("CREATE OR REPLACE TABLE tag_revenue AS SELECT * FROM out")
     """
-    raise NotImplementedError("Day 2: implement tag_revenue() in Polars")
+    cust = con.execute("SELECT customer_id, record_version, tags FROM raw_customers").pl()
+    rev = con.execute("SELECT customer_id, total_revenue FROM customer_order_summary").pl()
+
+    deduped = cust.sort("record_version", descending=True).unique(
+        subset="customer_id", keep="first"
+    )
+
+    out = (
+        deduped.explode("tags")
+        .filter(pl.col("tags").is_not_null() & (pl.col("tags") != ""))
+        .rename({"tags": "tag"})
+        .join(rev, on="customer_id", how="inner")
+        .group_by("tag")
+        .agg(pl.col("total_revenue").sum().alias("revenue"))
+    )
+
+    con.execute("CREATE OR REPLACE TABLE tag_revenue AS SELECT * FROM out")
+    return con.execute("SELECT count(*) FROM tag_revenue").fetchone()[0]
 
 
 def run_transforms(con: duckdb.DuckDBPyConnection) -> dict[str, int]:
