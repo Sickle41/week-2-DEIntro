@@ -21,4 +21,5 @@ wheels/
 .env
 data/source/
 data/raw/
+data/output/
 *.duckdb
