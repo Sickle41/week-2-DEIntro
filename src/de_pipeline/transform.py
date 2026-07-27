@@ -146,4 +146,9 @@ def run_transforms(con: duckdb.DuckDBPyConnection) -> dict[str, int]:
 
     Order matters: dedupe_orders -> clean_orders -> customer_order_summary ->
     tag_revenue."""
-    raise NotImplementedError("Day 3: implement run_transforms()")
+    return {
+        "orders_deduped": dedupe_orders(con),
+        "clean_orders": clean_orders(con),
+        "customer_order_summary": customer_order_summary(con),
+        "tag_revenue": tag_revenue(con),
+    }
