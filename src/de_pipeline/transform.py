@@ -96,7 +96,42 @@ def clean_orders(con: duckdb.DuckDBPyConnection) -> int:
 
     Build it from ``orders_deduped`` (run ``dedupe_orders`` first), not from
     ``raw_orders`` — you don't want to clean duplicate rows."""
-    raise NotImplementedError("Day 1: implement clean_orders()")
+    con.execute(
+        """
+        CREATE OR REPLACE TABLE clean_orders AS
+        WITH parsed AS (
+            SELECT
+                order_id,
+                customer_id,
+                sku,
+                quantity,
+                TRY_CAST(
+                    REPLACE(REPLACE(TRIM(price), '$', ''), ',', '') AS DOUBLE
+                ) AS price,
+                COALESCE(NULLIF(LOWER(TRIM(status)), ''), 'unknown') AS status,
+                COALESCE(
+                    TRY_STRPTIME(order_date, '%d-%b-%Y'),
+                    TRY_STRPTIME(order_date, '%Y-%m-%d'),
+                    TRY_STRPTIME(order_date, '%m/%d/%Y')
+                )::DATE AS order_date,
+                updated_at
+            FROM orders_deduped
+        )
+        SELECT
+            order_id,
+            customer_id,
+            sku,
+            quantity,
+            price,
+            status,
+            order_date,
+            updated_at,
+            quantity * price AS line_total
+        FROM parsed
+        WHERE quantity IS NOT NULL AND price IS NOT NULL
+        """
+    )
+    return con.execute("SELECT count(*) FROM clean_orders").fetchone()[0]
 
 
 def customer_order_summary(con: duckdb.DuckDBPyConnection, min_orders: int = 1) -> int:
