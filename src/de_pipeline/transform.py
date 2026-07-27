@@ -61,7 +61,24 @@ def dedupe_orders(con: duckdb.DuckDBPyConnection) -> int:
     ORDER BY updated_at DESC) inside a CTE, then keep where the row number is 1.
     Keep all the original columns; don't clean anything yet (that's the next
     step)."""
-    raise NotImplementedError("Day 1: implement dedupe_orders() with ROW_NUMBER()")
+    con.execute(
+        """
+        CREATE OR REPLACE TABLE orders_deduped AS
+        WITH ranked AS (
+            SELECT
+                *,
+                ROW_NUMBER() OVER (
+                    PARTITION BY order_id
+                    ORDER BY updated_at DESC
+                ) AS row_num
+            FROM raw_orders
+        )
+        SELECT * EXCLUDE (row_num)
+        FROM ranked
+        WHERE row_num = 1
+        """
+    )
+    return con.execute("SELECT count(*) FROM orders_deduped").fetchone()[0]
 
 
 def clean_orders(con: duckdb.DuckDBPyConnection) -> int:
