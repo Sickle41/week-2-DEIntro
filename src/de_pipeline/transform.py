@@ -61,23 +61,7 @@ def dedupe_orders(con: duckdb.DuckDBPyConnection) -> int:
     ORDER BY updated_at DESC) inside a CTE, then keep where the row number is 1.
     Keep all the original columns; don't clean anything yet (that's the next
     step)."""
-    con.execute(
-        """
-        CREATE OR REPLACE TABLE orders_deduped AS
-        WITH ranked AS (
-            SELECT
-                *,
-                ROW_NUMBER() OVER (
-                    PARTITION BY order_id
-                    ORDER BY updated_at DESC
-                ) AS row_num
-            FROM raw_orders
-        )
-        SELECT * EXCLUDE (row_num)
-        FROM ranked
-        WHERE row_num = 1
-        """
-    )
+    con.execute(read_sql("orders_deduped"))
     return con.execute("SELECT count(*) FROM orders_deduped").fetchone()[0]
 
 
@@ -96,41 +80,7 @@ def clean_orders(con: duckdb.DuckDBPyConnection) -> int:
 
     Build it from ``orders_deduped`` (run ``dedupe_orders`` first), not from
     ``raw_orders`` — you don't want to clean duplicate rows."""
-    con.execute(
-        """
-        CREATE OR REPLACE TABLE clean_orders AS
-        WITH parsed AS (
-            SELECT
-                order_id,
-                customer_id,
-                sku,
-                quantity,
-                TRY_CAST(
-                    REPLACE(REPLACE(TRIM(price), '$', ''), ',', '') AS DOUBLE
-                ) AS price,
-                COALESCE(NULLIF(LOWER(TRIM(status)), ''), 'unknown') AS status,
-                COALESCE(
-                    TRY_STRPTIME(order_date, '%d-%b-%Y'),
-                    TRY_STRPTIME(order_date, '%Y-%m-%d'),
-                    TRY_STRPTIME(order_date, '%m/%d/%Y')
-                )::DATE AS order_date,
-                updated_at
-            FROM orders_deduped
-        )
-        SELECT
-            order_id,
-            customer_id,
-            sku,
-            quantity,
-            price,
-            status,
-            order_date,
-            updated_at,
-            quantity * price AS line_total
-        FROM parsed
-        WHERE quantity IS NOT NULL AND price IS NOT NULL
-        """
-    )
+    con.execute(read_sql("clean_orders"))
     return con.execute("SELECT count(*) FROM clean_orders").fetchone()[0]
 
 
@@ -146,42 +96,7 @@ def customer_order_summary(con: duckdb.DuckDBPyConnection, min_orders: int = 1) 
       - ``min_orders`` is a threshold: only keep customers with at least that
         many orders. On Day 2, pass it into your SQL with PARAMETER BINDING
         (``con.execute(sql, {"min_orders": min_orders})``), not an f-string."""
-    con.execute(
-        """
-        CREATE OR REPLACE TABLE customer_order_summary AS
-        WITH deduped_customers AS (
-            SELECT * EXCLUDE (row_num)
-            FROM (
-                SELECT
-                    *,
-                    ROW_NUMBER() OVER (
-                        PARTITION BY customer_id
-                        ORDER BY record_version DESC
-                    ) AS row_num
-                FROM raw_customers
-            )
-            WHERE row_num = 1
-        ),
-        order_agg AS (
-            SELECT
-                customer_id,
-                count(*) AS order_count,
-                sum(line_total) AS total_revenue
-            FROM clean_orders
-            WHERE customer_id IS NOT NULL
-            GROUP BY customer_id
-        )
-        SELECT
-            c.customer_id,
-            c.name,
-            o.order_count,
-            o.total_revenue
-        FROM order_agg o
-        JOIN deduped_customers c ON c.customer_id = o.customer_id
-        WHERE o.order_count >= $min_orders
-        """,
-        {"min_orders": min_orders},
-    )
+    con.execute(read_sql("customer_order_summary"), {"min_orders": min_orders})
     return con.execute("SELECT count(*) FROM customer_order_summary").fetchone()[0]
 
 
