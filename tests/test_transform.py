@@ -188,3 +188,10 @@ def test_run_transforms_returns_all_counts(loaded_con: duckdb.DuckDBPyConnection
         "customer_order_summary": 3,
         "tag_revenue": 3,
     }
+
+
+def test_run_transforms_forwards_min_orders(loaded_con: duckdb.DuckDBPyConnection) -> None:
+    # Same threshold as test_customer_order_summary_min_orders_is_a_bound_param:
+    # only customer 1 has >= 2 orders.
+    result = transform.run_transforms(loaded_con, min_orders=2)
+    assert result["customer_order_summary"] == 1

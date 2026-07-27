@@ -141,14 +141,14 @@ def tag_revenue(con: duckdb.DuckDBPyConnection) -> int:
     return con.execute("SELECT count(*) FROM tag_revenue").fetchone()[0]
 
 
-def run_transforms(con: duckdb.DuckDBPyConnection) -> dict[str, int]:
+def run_transforms(con: duckdb.DuckDBPyConnection, min_orders: int = 1) -> dict[str, int]:
     """Run every transform in order and return ``{table_name: row_count}``.
 
     Order matters: dedupe_orders -> clean_orders -> customer_order_summary ->
-    tag_revenue."""
+    tag_revenue. ``min_orders`` is forwarded to ``customer_order_summary``."""
     return {
         "orders_deduped": dedupe_orders(con),
         "clean_orders": clean_orders(con),
-        "customer_order_summary": customer_order_summary(con),
+        "customer_order_summary": customer_order_summary(con, min_orders=min_orders),
         "tag_revenue": tag_revenue(con),
     }
