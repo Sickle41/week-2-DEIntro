@@ -12,7 +12,7 @@ import argparse
 from pathlib import Path
 
 # The stages you'll orchestrate. Each exposes the functions you wrote this week.
-from de_pipeline import export, fetch, load, transform
+from de_pipeline import export, fetch, load, transform, validate
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -71,6 +71,11 @@ def main(argv: list[str] | None = None) -> None:
         transform_counts = transform.run_transforms(con, min_orders=args.min_orders)
         for table, count in transform_counts.items():
             print(f"  {table}: {count} rows")
+
+        print("Running data-quality checks...")
+        passed_checks = validate.run_checks(con)
+        for name in passed_checks:
+            print(f"  ok: {name}")
 
         print("Exporting results...")
         exported = export.export_all(con, dest_dir=args.output_dir)
